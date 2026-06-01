@@ -13,6 +13,13 @@ DATABASE_URL = os.getenv("DATABASE_URL", "")
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "./mlruns")
 API_URL = os.getenv("API_URL", "http://localhost:8000")
 
+# Monitored stock symbols
+MONITORED_SYMBOLS = [
+    "AAPL", "MSFT", "AMZN", "NVDA", "GOOGL", "META", "TSLA", "BRK-B", "UNH", "LLY",
+    "JPM", "V", "XOM", "TSM", "WMT", "PG", "JNJ", "AVGO", "COST", "MA",
+    "CVX", "HD", "MRK", "ASML", "PEP", "ABBV", "KO", "ORCL", "BAC", "AMD"
+]
+
 # SMTP Credentials & Alert settings
 SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))

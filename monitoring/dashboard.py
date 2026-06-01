@@ -14,7 +14,7 @@ import config
 
 # Streamlit App Configurations
 st.set_page_config(
-    page_title="S&P 500 MLOps Hub",
+    page_title="Multi-Stock MLOps Hub",
     page_icon="🔮",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -85,7 +85,7 @@ st.markdown("""
     
     .glow-pink {
         color: #ff416c;
-        text-shadow: 0 0 12px rgba(ff, 65, 108, 0.5);
+        text-shadow: 0 0 12px rgba(255, 65, 108, 0.5);
     }
     
     .glow-green {
@@ -95,13 +95,13 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Helper to fetch DB data
-def load_db_data():
+# Helper to fetch DB data filtered by symbol
+def load_db_data(symbol):
     conn = config.get_db_connection()
     try:
-        df_prices = pd.read_sql_query("SELECT * FROM raw_prices ORDER BY date DESC LIMIT 60", conn)
-        df_preds = pd.read_sql_query("SELECT * FROM predictions ORDER BY created_at DESC LIMIT 60", conn)
-        df_actuals = pd.read_sql_query("SELECT * FROM actuals ORDER BY date DESC LIMIT 60", conn)
+        df_prices = pd.read_sql_query("SELECT * FROM raw_prices WHERE symbol = ? ORDER BY date DESC LIMIT 60", conn, params=[symbol])
+        df_preds = pd.read_sql_query("SELECT * FROM predictions WHERE symbol = ? ORDER BY created_at DESC LIMIT 60", conn, params=[symbol])
+        df_actuals = pd.read_sql_query("SELECT * FROM actuals WHERE symbol = ? ORDER BY date DESC LIMIT 60", conn, params=[symbol])
         return df_prices, df_preds, df_actuals
     except Exception as e:
         st.error(f"Error loading database records: {e}")
@@ -110,15 +110,20 @@ def load_db_data():
         conn.close()
 
 # Layout
-st.markdown("<h1 class='glow-header'>🔮 S&P 500 MLOps Control Hub</h1>", unsafe_allow_html=True)
-st.write("Production-grade price prediction, real-time feature drift analysis, and model monitoring.")
+st.markdown("<h1 class='glow-header'>🔮 Multi-Stock MLOps Control Hub</h1>", unsafe_allow_html=True)
+st.write("Quantitative return forecasting, panel feature drift, and real-time validation across 30 major liquid stocks.")
 st.markdown("<br>", unsafe_allow_html=True)
 
-# Load data
-df_prices, df_preds, df_actuals = load_db_data()
-
-# Sidebar Setup info
+# Sidebar Setup info with Symbol Dropdown
 with st.sidebar:
+    st.markdown("### 🎯 Asset Monitor")
+    selected_symbol = st.selectbox(
+        "Select Stock Symbol:",
+        config.MONITORED_SYMBOLS,
+        index=0
+    )
+    
+    st.markdown("---")
     st.markdown("### 🧬 Systems health")
     
     # Simple check on FastAPI
@@ -133,7 +138,7 @@ with st.sidebar:
     if api_online:
         st.success("🟢 FastAPI: Serving")
     else:
-        st.error("🔴 FastAPI: Offline / Sleeping")
+        st.error("🔴 FastAPI: Offline")
         
     st.info(f"💾 Database: {config.DB_TYPE.upper()}")
     
@@ -141,24 +146,28 @@ with st.sidebar:
     model_ver = "None"
     if api_online:
         try:
-            model_ver = resp.json().get("model_version", "v1.0")
+            model_ver = resp.json().get("model_version", "v2.0")
         except:
             pass
     st.info(f"🤖 Model: {model_ver}")
     
     st.markdown("---")
     st.markdown("### 📊 Metrics Summary")
+    
+    # Load data for selected symbol
+    df_prices, df_preds, df_actuals = load_db_data(selected_symbol)
+    
     if not df_actuals.empty:
-        # Calculate MAE, Directional Accuracy
+        # Calculate MAE, Directional Accuracy for selected symbol
         mae = df_actuals['absolute_error'].mean()
         acc = df_actuals['direction_correct'].mean() * 100
-        st.metric(label="30-day Rolling MAE", value=f"${mae:.2f}")
-        st.metric(label="Directional Accuracy", value=f"{acc:.1f}%")
+        st.metric(label=f"30-day MAE ({selected_symbol})", value=f"${mae:.2f}")
+        st.metric(label=f"Dir. Accuracy ({selected_symbol})", value=f"{acc:.1f}%")
     else:
-        st.write("No validation logs in DB yet.")
+        st.write(f"No validation logs for {selected_symbol} in DB yet.")
 
 # Main Dashboard View Tabs
-tab1, tab2, tab3, tab4 = st.tabs(["🔮 Market Predictor", "📈 Performance Monitoring", "🧬 Feature Drift", "⚙️ MLOps Pipelines"])
+tab1, tab2, tab3, tab4 = st.tabs([f"🔮 {selected_symbol} Forecasts", f"📈 {selected_symbol} Analytics", "🧬 Global Data Drift", "⚙️ MLOps Pipelines"])
 
 # --- TAB 1: MARKET PREDICTOR ---
 with tab1:
@@ -166,7 +175,7 @@ with tab1:
     
     with col1:
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
-        st.markdown("### 🔮 Tomorrow's Price Forecast")
+        st.markdown(f"### 🔮 {selected_symbol} Price Forecast")
         
         # Fetch latest prediction
         latest_pred = None
@@ -191,42 +200,49 @@ with tab1:
             st.markdown(f"<h4>Predicted Trend: <span class='{glow_class}'>{direction}</span></h4>", unsafe_allow_html=True)
             st.markdown(f"<p>Latest Close Price: <strong>${latest_close:.2f}</strong></p>", unsafe_allow_html=True)
         else:
-            st.write("No predictions generated yet. Run initial pipelines first!")
+            st.write(f"No predictions generated for {selected_symbol} yet.")
         st.markdown("</div>", unsafe_allow_html=True)
         
     with col2:
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
-        st.markdown("### 🎛️ Interactive Prediction Simulator")
-        st.write("Override feature values below to simulate a real-time prediction model response:")
+        st.markdown(f"### 🎛️ {selected_symbol} Simulator")
+        st.write("Simulate next close using scale-invariant features and returns calculations:")
         
-        # Load latest features as placeholder defaults
+        # Load latest features as default sliders
         latest_feats = {
-            "sma_5": 510.0, "sma_20": 505.0, "sma_50": 498.0, "rsi_14": 55.0,
-            "macd": 1.2, "macd_signal": 1.0, "bb_upper": 515.0, "bb_lower": 495.0,
+            "close": 150.0, "sma_5": 150.0, "sma_20": 148.0, "sma_50": 145.0, "rsi_14": 55.0,
+            "macd": 1.2, "macd_signal": 1.0, "bb_upper": 155.0, "bb_lower": 141.0,
             "volume_change_pct": 0.02, "vix": 14.5, "day_of_week": 2, "month": 6
         }
         
-        # Load active defaults from latest row in SQLite if available
+        # Prefill default values from SQLite features table if available
         conn = config.get_db_connection()
         try:
-            df_feat = pd.read_sql_query("SELECT * FROM features ORDER BY date DESC LIMIT 1", conn)
+            df_feat = pd.read_sql_query("SELECT * FROM features WHERE symbol = ? ORDER BY date DESC LIMIT 1", conn, params=[selected_symbol])
+            df_p = pd.read_sql_query("SELECT close FROM raw_prices WHERE symbol = ? ORDER BY date DESC LIMIT 1", conn, params=[selected_symbol])
             if not df_feat.empty:
                 for col in latest_feats:
-                    latest_feats[col] = float(df_feat.iloc[0][col])
+                    if col in df_feat.columns:
+                        latest_feats[col] = float(df_feat.iloc[0][col])
+            if not df_p.empty:
+                latest_feats["close"] = float(df_p.iloc[0]["close"])
         except:
             pass
         finally:
             conn.close()
             
-        sim_sma5 = st.slider("SMA 5", float(latest_feats['sma_5']*0.8), float(latest_feats['sma_5']*1.2), float(latest_feats['sma_5']))
-        sim_rsi = st.slider("RSI (14-day)", 10.0, 90.0, float(latest_feats['rsi_14']))
-        sim_vix = st.slider("CBOE VIX Index", 9.0, 50.0, float(latest_feats['vix']))
-        sim_vol = st.slider("Volume Change %", -0.5, 0.5, float(latest_feats['volume_change_pct']))
+        sim_close = st.slider("Current Close Price ($)", float(latest_feats['close']*0.8), float(latest_feats['close']*1.2), float(latest_feats['close']))
+        sim_sma5 = st.slider("SMA 5 Indicator", float(latest_feats['sma_5']*0.8), float(latest_feats['sma_5']*1.2), float(latest_feats['sma_5']))
+        sim_rsi = st.slider("RSI Indicator (14-day)", 10.0, 90.0, float(latest_feats['rsi_14']))
+        sim_vix = st.slider("CBOE VIX Volatility Index", 9.0, 50.0, float(latest_feats['vix']))
+        sim_vol = st.slider("Volume Change % (Day-over-Day)", -0.5, 0.5, float(latest_feats['volume_change_pct']))
         
-        if st.button("🔮 Simulate prediction"):
+        if st.button("🔮 Run Simulator Prediction"):
             payload = {
+                "symbol": selected_symbol,
                 "date": datetime.datetime.now().strftime("%Y-%m-%d"),
                 "target_date": (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%Y-%m-%d"),
+                "close": sim_close,
                 "sma_5": sim_sma5,
                 "sma_20": latest_feats['sma_20'],
                 "sma_50": latest_feats['sma_50'],
@@ -244,18 +260,19 @@ with tab1:
             try:
                 resp = httpx.post(f"{config.API_URL}/predict", json=payload, timeout=5.0)
                 if resp.status_code == 200:
-                    st.success(f"Simulated price prediction: **${resp.json()['predicted_price']:.2f}**")
+                    res = resp.json()
+                    st.success(f"Simulated Next Close: **${res['predicted_price']:.2f}** (Forecasted Return: **{res['predicted_return_pct']}%**)")
                 else:
-                    st.error("FastAPI Prediction failed. Is FastAPI running locally?")
+                    st.error("FastAPI simulation prediction request failed.")
             except Exception as ex:
-                st.error(f"Simulator error calling FastAPI: {ex}")
+                st.error(f"Failed to communicate with simulator endpoint: {ex}")
         st.markdown("</div>", unsafe_allow_html=True)
 
 # --- TAB 2: PERFORMANCE MONITORING ---
 with tab2:
     if not df_actuals.empty:
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
-        st.markdown("### 📈 Forecasted vs Actual price (30-day)")
+        st.markdown(f"### 📈 Forecasted vs Actual Close (Rolling 30-day for {selected_symbol})")
         
         # Chronological sort
         df_actuals_sorted = df_actuals.iloc[::-1].copy()
@@ -269,25 +286,24 @@ with tab2:
         c1, c2 = st.columns([1, 1])
         with c1:
             st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
-            st.markdown("### 📊 Rolling Absolute prediction error")
+            st.markdown("### 📊 Absolute Prediction Errors ($)")
             st.bar_chart(df_actuals_sorted.set_index('date')['absolute_error'])
             st.markdown("</div>", unsafe_allow_html=True)
         with c2:
             st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
-            st.markdown("### 🎯 Directional Accuracy timeline")
-            # Draw correct vs incorrect direction indicator
+            st.markdown("### 🎯 Directional Accuracy Logs")
             direction_chart = df_actuals_sorted[['date', 'direction_correct']].copy()
             direction_chart['direction_correct'] = direction_chart['direction_correct'].apply(lambda x: "CORRECT" if x == 1 else "FAIL")
             st.dataframe(direction_chart, use_container_width=True)
             st.markdown("</div>", unsafe_allow_html=True)
     else:
-        st.info("No predictions evaluated yet. Run the daily orchestration pipeline to match predictions vs actual close prices!")
+        st.info(f"No validation logs generated for {selected_symbol} in DB yet.")
 
 # --- TAB 3: FEATURE DRIFT ---
 with tab3:
     st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
-    st.markdown("### 🧬 Evidently AI Data Drift report")
-    st.write("Below is the embedded live Feature and Target Drift Report generated by Evidently AI:")
+    st.markdown("### 🧬 Global Feature Drift (Panel Data Audits)")
+    st.write("Below is the embedded live Feature and Target Drift Report computed globally across the entire 30-stock panel:")
     
     drift_path = "monitoring/drift_report.html"
     if os.path.exists(drift_path):
@@ -305,7 +321,7 @@ with tab4:
     with col_x:
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
         st.markdown("### ⚙️ Retrain Machine Learning Model")
-        st.write("Kick off a complete model retraining flow. This will load the raw S&P 500 history, calculate engineering features, train a new XGBoost Regressor model, log metrics to MLflow, and automatically hot-swap the model in the API.")
+        st.write("Kicks off a complete model retraining flow. This loads raw daily price histories for all 30 monitored stocks, recalculates scale-invariant indicators, fits a new global XGBoost model, registers it to MLflow, and automatically hot-swaps it in the API.")
         
         if st.button("🚀 Trigger Model Retraining"):
             with st.spinner("Retraining model in progress..."):
@@ -315,7 +331,7 @@ with tab4:
                         st.success("Model retraining triggered successfully! Hot-reload complete.")
                         st.balloons()
                     else:
-                        st.error("FastAPI endpoint retrain failed.")
+                        st.error("FastAPI retraining endpoint failed.")
                 except Exception as ex:
                     st.error(f"Failed to communicate with FastAPI: {ex}")
         st.markdown("</div>", unsafe_allow_html=True)
@@ -330,5 +346,5 @@ on:
   schedule:
     - cron: '5 23 * * 1-5' # weekdays only
         """, language="yaml")
-        st.write("This runs `pipelines/daily_pipeline.py` which ingests close prices, evaluates the yesterday forecast, computes feature drift, and monitors rolling errors.")
+        st.write("This runs `pipelines/daily_pipeline.py` which ingests closes, computes features, generates daily predictions, and evaluates yesterday error metrics for all 30 symbols.")
         st.markdown("</div>", unsafe_allow_html=True)
