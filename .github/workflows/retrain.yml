@@ -1,0 +1,32 @@
+name: Model Retraining Pipeline
+
+on:
+  schedule:
+    - cron: '0 4 * * 0'      # 4:00 AM UTC = midnight ET, every Sunday
+  workflow_dispatch:         # Allow manual retraining trigger via GitHub Actions API / dashboard
+
+jobs:
+  retrain-model:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run model training
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+      run: |
+        python training/train.py
