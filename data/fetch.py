@@ -22,14 +22,29 @@ def init_db(conn):
         cursor.execute("SELECT symbol FROM raw_prices LIMIT 1")
     except Exception:
         upgrade_needed = True
+        # In PostgreSQL, an exception aborts the active transaction block.
+        # We must rollback to reset the transaction state before running any other queries.
+        try:
+            conn.rollback()
+            cursor = conn.cursor()
+        except Exception:
+            pass
         
     if upgrade_needed:
         print("Migrating database to multi-stock panel schema...")
-        cursor.execute("DROP TABLE IF EXISTS raw_prices;")
-        cursor.execute("DROP TABLE IF EXISTS features;")
-        cursor.execute("DROP TABLE IF EXISTS predictions;")
-        cursor.execute("DROP TABLE IF EXISTS actuals;")
-        conn.commit()
+        try:
+            cursor.execute("DROP TABLE IF EXISTS raw_prices CASCADE;")
+            cursor.execute("DROP TABLE IF EXISTS features CASCADE;")
+            cursor.execute("DROP TABLE IF EXISTS predictions CASCADE;")
+            cursor.execute("DROP TABLE IF EXISTS actuals CASCADE;")
+            conn.commit()
+        except Exception as e:
+            print(f"Migration drop warning: {e}")
+            try:
+                conn.rollback()
+                cursor = conn.cursor()
+            except Exception:
+                pass
     
     if config.DB_TYPE == "sqlite":
         # Create SQLite tables with symbol column and composite PKs

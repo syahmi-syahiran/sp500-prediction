@@ -8,9 +8,15 @@ import streamlit as st
 import streamlit.components.v1 as components
 import httpx
 
-# Adjust path to import config
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import config
+# Adjust path to import config without namespace collision in Streamlit
+import importlib.util
+spec = importlib.util.spec_from_file_location(
+    "local_config",
+    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.py")
+)
+config = importlib.util.module_from_spec(spec)
+sys.modules["local_config"] = config
+spec.loader.exec_module(config)
 
 # Streamlit App Configurations
 st.set_page_config(

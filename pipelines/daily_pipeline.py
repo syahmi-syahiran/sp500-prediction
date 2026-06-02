@@ -10,7 +10,7 @@ import sys
 import os
 
 # Adjust path to import config
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
 from data import fetch
 from features import engineering
@@ -258,6 +258,7 @@ def main():
     # 1. Fetch latest raw data for all 30 stocks
     conn = config.get_db_connection()
     try:
+        fetch.init_db(conn)
         fetch.fetch_and_save_data(conn)
     finally:
         conn.close()
