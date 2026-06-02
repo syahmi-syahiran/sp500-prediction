@@ -181,8 +181,19 @@ def fetch_and_save_data(conn, start_date=None, end_date=None):
     cursor = conn.cursor()
     placeholder = "?" if config.DB_TYPE == "sqlite" else "%s"
     
-    total_inserted = 0
-    
+    # Load all existing keys in memory to avoid N network roundtrips
+    existing_keys = set()
+    try:
+        cursor.execute("SELECT symbol, date FROM raw_prices")
+        for row in cursor.fetchall():
+            sym = row[0]
+            dt = row[1]
+            if not isinstance(dt, str) and dt is not None:
+                dt = dt.strftime('%Y-%m-%d')
+            existing_keys.add((sym, dt))
+    except Exception:
+        pass
+
     for symbol in config.MONITORED_SYMBOLS:
         print(f"Fetching {symbol} daily data from {start_date} to {end_date}...")
         try:
@@ -197,28 +208,31 @@ def fetch_and_save_data(conn, start_date=None, end_date=None):
             df = df.reset_index()
             df['Date'] = df['Date'].dt.strftime('%Y-%m-%d')
             
-            rows_inserted = 0
+            insert_data = []
             for _, row in df.iterrows():
-                # Check if record already exists
-                cursor.execute(f"SELECT 1 FROM raw_prices WHERE symbol = {placeholder} AND date = {placeholder}", (symbol, row['Date']))
-                if cursor.fetchone():
+                row_date = row['Date']
+                if (symbol, row_date) in existing_keys:
                     continue
-                    
-                cursor.execute(f"""
-                INSERT INTO raw_prices (symbol, date, open, high, low, close, volume)
-                VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})
-                """, (
+                insert_data.append((
                     symbol,
-                    row['Date'],
+                    row_date,
                     float(row['Open']),
                     float(row['High']),
                     float(row['Low']),
                     float(row['Close']),
                     int(row['Volume'])
                 ))
-                rows_inserted += 1
                 
-            conn.commit()
+            if insert_data:
+                cursor.executemany(f"""
+                INSERT INTO raw_prices (symbol, date, open, high, low, close, volume)
+                VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})
+                """, insert_data)
+                conn.commit()
+                rows_inserted = len(insert_data)
+            else:
+                rows_inserted = 0
+                
             print(f"Successfully processed {symbol}: {rows_inserted} new records stored.")
             total_inserted += rows_inserted
         except Exception as e:

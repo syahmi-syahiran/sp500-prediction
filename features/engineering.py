@@ -61,8 +61,22 @@ def engineer_features(conn):
     df_vix = fetch_vix_data(start_date, end_date)
     vix_dict = dict(zip(df_vix['date'], df_vix['vix']))
     
+    # Load all existing keys in memory to avoid N network roundtrips
+    existing_features = set()
+    try:
+        cursor.execute("SELECT symbol, date FROM features")
+        for row in cursor.fetchall():
+            sym = row[0]
+            dt = row[1]
+            if not isinstance(dt, str) and dt is not None:
+                dt = dt.strftime('%Y-%m-%d')
+            existing_features.add((sym, dt))
+    except Exception:
+        pass
+
     symbols = df_prices['symbol'].unique()
     total_added = 0
+    placeholder = "?" if config.DB_TYPE == "sqlite" else "%s"
     
     for symbol in symbols:
         print(f"Engineering features for {symbol}...")
@@ -107,45 +121,33 @@ def engineer_features(conn):
         # Drop rows that have NaN values due to rolling windows
         df_features = df.dropna().copy()
         
-        placeholder = "?" if config.DB_TYPE == "sqlite" else "%s"
-        
-        rows_inserted = 0
+        insert_data = []
         for _, row in df_features.iterrows():
-            # Check if features for symbol and date already exist
-            cursor.execute(f"SELECT 1 FROM features WHERE symbol = {placeholder} AND date = {placeholder}", (symbol, row['date']))
-            if cursor.fetchone():
-                cursor.execute(f"""
-                UPDATE features SET
-                    sma_5 = {placeholder}, sma_20 = {placeholder}, sma_50 = {placeholder},
-                    rsi_14 = {placeholder}, macd = {placeholder}, macd_signal = {placeholder},
-                    bb_upper = {placeholder}, bb_lower = {placeholder}, volume_change_pct = {placeholder},
-                    vix = {placeholder}, day_of_week = {placeholder}, month = {placeholder}
-                WHERE symbol = {placeholder} AND date = {placeholder}
-                """, (
-                    float(row['sma_5']), float(row['sma_20']), float(row['sma_50']),
-                    float(row['rsi_14']), float(row['macd']), float(row['macd_signal']),
-                    float(row['bb_upper']), float(row['bb_lower']), float(row['volume_change_pct']),
-                    float(row['vix']), int(row['day_of_week']), int(row['month']),
-                    symbol, row['date']
-                ))
-            else:
-                cursor.execute(f"""
-                INSERT INTO features (
-                    symbol, date, sma_5, sma_20, sma_50, rsi_14, macd, macd_signal, bb_upper, bb_lower, volume_change_pct, vix, day_of_week, month
-                ) VALUES (
-                    {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}
-                )
-                """, (
-                    symbol,
-                    row['date'],
-                    float(row['sma_5']), float(row['sma_20']), float(row['sma_50']),
-                    float(row['rsi_14']), float(row['macd']), float(row['macd_signal']),
-                    float(row['bb_upper']), float(row['bb_lower']), float(row['volume_change_pct']),
-                    float(row['vix']), int(row['day_of_week']), int(row['month'])
-                ))
-                rows_inserted += 1
-                
-        conn.commit()
+            row_date = row['date']
+            if (symbol, row_date) in existing_features:
+                continue
+            insert_data.append((
+                symbol,
+                row_date,
+                float(row['sma_5']), float(row['sma_20']), float(row['sma_50']),
+                float(row['rsi_14']), float(row['macd']), float(row['macd_signal']),
+                float(row['bb_upper']), float(row['bb_lower']), float(row['volume_change_pct']),
+                float(row['vix']), int(row['day_of_week']), int(row['month'])
+            ))
+            
+        if insert_data:
+            cursor.executemany(f"""
+            INSERT INTO features (
+                symbol, date, sma_5, sma_20, sma_50, rsi_14, macd, macd_signal, bb_upper, bb_lower, volume_change_pct, vix, day_of_week, month
+            ) VALUES (
+                {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}
+            )
+            """, insert_data)
+            conn.commit()
+            rows_inserted = len(insert_data)
+        else:
+            rows_inserted = 0
+            
         print(f"Successfully processed {symbol}: {rows_inserted} new feature records stored.")
         total_added += rows_inserted
         
