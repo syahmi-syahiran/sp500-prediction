@@ -194,6 +194,8 @@ def fetch_and_save_data(conn, start_date=None, end_date=None):
     except Exception:
         pass
 
+    total_inserted = 0
+
     for symbol in config.MONITORED_SYMBOLS:
         print(f"Fetching {symbol} daily data from {start_date} to {end_date}...")
         try:
