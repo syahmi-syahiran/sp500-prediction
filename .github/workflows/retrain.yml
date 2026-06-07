@@ -29,4 +29,6 @@ jobs:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
       run: |
+        python data/fetch.py
+        python features/engineering.py
         python training/train.py
