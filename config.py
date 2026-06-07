@@ -61,6 +61,21 @@ def get_db_connection():
         # Import psycopg2 dynamically so psycopg2 is only required for production Postgres
         import psycopg2
         import psycopg2.extras
-        # Use extras.DictCursor to have identical dictionary/name-based access in both SQLite and Postgres
-        conn = psycopg2.connect(DATABASE_URL)
-        return conn
+        import time
+        
+        # Use a retry loop (5 attempts, 5s delay) to handle Neon cold starts / scale-to-zero wakeups
+        max_attempts = 5
+        retry_delay = 5
+        last_error = None
+        
+        for attempt in range(1, max_attempts + 1):
+            try:
+                # Add connect_timeout to allow time for server to wake up
+                conn = psycopg2.connect(DATABASE_URL, connect_timeout=15)
+                return conn
+            except psycopg2.OperationalError as e:
+                last_error = e
+                print(f"Database connection attempt {attempt}/{max_attempts} failed: {e}. Retrying in {retry_delay}s...")
+                time.sleep(retry_delay)
+                
+        raise last_error
