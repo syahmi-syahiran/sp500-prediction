@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import requests
 import yfinance as yf
 import sys
 import os
@@ -13,7 +14,11 @@ def fetch_vix_data(start_date, end_date):
     Fetches VIX historical data from yfinance.
     """
     print(f"Fetching VIX data from {start_date} to {end_date}...")
-    ticker = yf.Ticker("^VIX")
+    session = requests.Session()
+    session.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    })
+    ticker = yf.Ticker("^VIX", session=session)
     df = ticker.history(start=start_date, end=end_date, interval="1d")
     if df.empty:
         print("Warning: VIX data returned empty.")
@@ -50,9 +55,8 @@ def engineer_features(conn):
     query = "SELECT symbol, date, open, high, low, close, volume FROM raw_prices ORDER BY date ASC"
     df_prices = pd.read_sql_query(query, conn)
     
-    if df_prices.empty:
-        print("No raw price data in DB to engineer features.")
-        return
+    if df_prices.empty or len(df_prices) < 50:
+        raise ValueError(f"No raw price data in DB (found {len(df_prices)} records, need at least 50) to engineer features.")
         
     start_date = df_prices['date'].min()
     end_date = (pd.to_datetime(df_prices['date'].max()) + pd.Timedelta(days=1)).strftime('%Y-%m-%d')
@@ -152,6 +156,12 @@ def engineer_features(conn):
         total_added += rows_inserted
         
     print(f"Feature engineering completed. Total feature vectors added/updated: {total_added}")
+    
+    # Verify that we have enough records in the features table
+    cursor.execute("SELECT COUNT(*) FROM features")
+    total_features = cursor.fetchone()[0]
+    if total_features < 50:
+        raise ValueError(f"Not enough features in DB after engineering (found {total_features} records, need at least 50).")
 
 if __name__ == "__main__":
     conn = config.get_db_connection()

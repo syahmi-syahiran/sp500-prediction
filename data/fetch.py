@@ -1,5 +1,6 @@
 import datetime
 import pandas as pd
+import requests
 import yfinance as yf
 import sys
 import os
@@ -194,12 +195,18 @@ def fetch_and_save_data(conn, start_date=None, end_date=None):
     except Exception:
         pass
 
+    # Setup session with modern User-Agent to prevent Yahoo Finance blocking on cloud providers
+    session = requests.Session()
+    session.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    })
+
     total_inserted = 0
 
     for symbol in config.MONITORED_SYMBOLS:
         print(f"Fetching {symbol} daily data from {start_date} to {end_date}...")
         try:
-            ticker = yf.Ticker(symbol)
+            ticker = yf.Ticker(symbol, session=session)
             df = ticker.history(start=start_date, end=end_date, interval="1d")
             
             if df.empty:
@@ -241,6 +248,10 @@ def fetch_and_save_data(conn, start_date=None, end_date=None):
             print(f"Error fetching data for symbol {symbol}: {e}")
             
     print(f"Fetch completed. Total raw price rows added: {total_inserted}")
+    
+    total_available = len(existing_keys) + total_inserted
+    if total_available < 50:
+        raise ValueError(f"Not enough raw price data in DB (only {total_available} records found/fetched) to proceed with feature engineering and training. Yahoo Finance might be blocking the request or rate-limiting it.")
 
 if __name__ == "__main__":
     conn = config.get_db_connection()
