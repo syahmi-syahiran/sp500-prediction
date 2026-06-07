@@ -58,6 +58,9 @@ def engineer_features(conn):
     if df_prices.empty or len(df_prices) < 50:
         raise ValueError(f"No raw price data in DB (found {len(df_prices)} records, need at least 50) to engineer features.")
         
+    # Format date as string to prevent type mismatch (e.g. datetime.date vs str)
+    df_prices['date'] = pd.to_datetime(df_prices['date']).dt.strftime('%Y-%m-%d')
+    
     start_date = df_prices['date'].min()
     end_date = (pd.to_datetime(df_prices['date'].max()) + pd.Timedelta(days=1)).strftime('%Y-%m-%d')
     

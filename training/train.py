@@ -36,6 +36,10 @@ def load_training_data(conn):
     """
     df = pd.read_sql_query(query, conn)
     
+    # Normalize dates to string YYYY-MM-DD format
+    if not df.empty:
+        df['date'] = pd.to_datetime(df['date']).dt.strftime('%Y-%m-%d')
+    
     if df.empty or len(df) < 50:
         raise ValueError("Not enough features data in DB to train model.")
         
