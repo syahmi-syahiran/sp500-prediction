@@ -233,10 +233,17 @@ def fetch_and_save_data(conn, start_date=None, end_date=None):
                 ))
                 
             if insert_data:
-                cursor.executemany(f"""
-                INSERT INTO raw_prices (symbol, date, open, high, low, close, volume)
-                VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})
-                """, insert_data)
+                if config.DB_TYPE == "sqlite":
+                    cursor.executemany(f"""
+                    INSERT INTO raw_prices (symbol, date, open, high, low, close, volume)
+                    VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})
+                    """, insert_data)
+                else:
+                    from psycopg2.extras import execute_values
+                    execute_values(cursor, """
+                    INSERT INTO raw_prices (symbol, date, open, high, low, close, volume)
+                    VALUES %s
+                    """, insert_data)
                 conn.commit()
                 rows_inserted = len(insert_data)
             else:

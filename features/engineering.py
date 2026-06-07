@@ -143,13 +143,21 @@ def engineer_features(conn):
             ))
             
         if insert_data:
-            cursor.executemany(f"""
-            INSERT INTO features (
-                symbol, date, sma_5, sma_20, sma_50, rsi_14, macd, macd_signal, bb_upper, bb_lower, volume_change_pct, vix, day_of_week, month
-            ) VALUES (
-                {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}
-            )
-            """, insert_data)
+            if config.DB_TYPE == "sqlite":
+                cursor.executemany(f"""
+                INSERT INTO features (
+                    symbol, date, sma_5, sma_20, sma_50, rsi_14, macd, macd_signal, bb_upper, bb_lower, volume_change_pct, vix, day_of_week, month
+                ) VALUES (
+                    {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}
+                )
+                """, insert_data)
+            else:
+                from psycopg2.extras import execute_values
+                execute_values(cursor, """
+                INSERT INTO features (
+                    symbol, date, sma_5, sma_20, sma_50, rsi_14, macd, macd_signal, bb_upper, bb_lower, volume_change_pct, vix, day_of_week, month
+                ) VALUES %s
+                """, insert_data)
             conn.commit()
             rows_inserted = len(insert_data)
         else:
