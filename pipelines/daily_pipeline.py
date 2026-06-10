@@ -281,8 +281,11 @@ def main():
             latest_row = cursor.fetchone()
             if latest_row:
                 today_str = latest_row[0]
-                # Re-calculate tomorrow_str
-                today_dt = datetime.datetime.strptime(today_str, '%Y-%m-%d')
+                if isinstance(today_str, datetime.date):
+                    today_dt = today_str
+                    today_str = today_str.strftime('%Y-%m-%d')
+                else:
+                    today_dt = datetime.datetime.strptime(today_str, '%Y-%m-%d')
                 tomorrow = today_dt + datetime.timedelta(days=1)
                 if tomorrow.weekday() == 5:
                     tomorrow = tomorrow + datetime.timedelta(days=2)
